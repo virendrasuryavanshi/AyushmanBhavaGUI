@@ -1,11 +1,13 @@
-from flask import Flask, request, url_for, render_template
-from flask_restful import Resource, Api
+from flask import Flask, request, url_for, render_template, jsonify
 import requests
-import json
 import os
-import subprocess
 from openpyxl import load_workbook
+import paypalrestsdk
 from time import sleep
+# from flask_restful import Resource
+# import json
+# import subprocess
+# import logging
 
 def work_load():
 	wb1 = load_workbook('sheet.xlsx')
@@ -20,7 +22,7 @@ def run_motor(Motor):
 
 ws, wb1 = work_load()
 
-a = ws['B1']   
+a = ws['B1']
 b = ws['B2']
 c = ws['B3']
 d = ws['B4']
@@ -32,7 +34,6 @@ i = ws['B9']
 j = ws['B10']
 
 items = [a,b,c,d,e,f,g,h,i,j]
-
 def restart_trans():
 	for i in range (1,11):
 		ws.cell(row=i, column=2).value=0
@@ -47,11 +48,11 @@ def compute_sum():
 
 restart_trans()
 
-os.environ['http_proxy'] = "http://10.7.0.1:8080" 
-os.environ['https_proxy'] = "https://10.7.0.1:8080"
+os.environ['http_proxy'] = "http://10.8.0.1:8080" 
+os.environ['https_proxy'] = "https://10.8.0.1:8080"
 
 app = Flask(__name__)
-api = Api(app)
+# api = Api(app)
 
 @app.errorhandler(404)
 def page_not_found(e):
@@ -61,17 +62,22 @@ def page_not_found(e):
 def pag_not_found(e):
     return render_template('500.html'), 500
 
+@app.route('/home')
+def home():
+	restart_trans()
+	return render_template('index.html')
+
 @app.route('/')
 def hello():
 	restart_trans()
 	return render_template('index.html')
 
-@app.route('/purchase')
-def purchase():
-   return render_template('purchase_redirect.html')
-
 @app.route('/sos')
 def sos():
+   return render_template('sos.html')
+
+@app.route('/purchase')
+def purchase():
 	return render_template('menu.html')
 
 @app.route('/dis')
@@ -83,65 +89,19 @@ def discard():
 def grandt():	
 	return render_template('total.html', variable=str(compute_sum()))
 
-@app.route('/med1')
-def med1():
-	ws.cell(row=1, column=2).value = ws.cell(row=1, column=2).value + 1
+@app.route('/addmed/<id>')
+def addmed(id):
+	id=int(id)
+	ws.cell(row=id, column=2).value = ws.cell(row=id, column=2).value + 1
 	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
+	# print (ws.cell(row=id, column=2).value)
+	return str(ws.cell(row=id, column=2).value)
 
-@app.route('/med2')
-def med2():
-	ws.cell(row=2, column=2).value = ws.cell(row=2, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med3')
-def med3():
-	ws.cell(row=3, column=2).value = ws.cell(row=3, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med4')
-def med4():
-	ws.cell(row=4, column=2).value = ws.cell(row=4, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med5')
-def med5():
-	ws.cell(row=5, column=2).value = ws.cell(row=5, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med6')
-def med6():
-	ws.cell(row=6, column=2).value = ws.cell(row=6, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med7')
-def med7():
-	ws.cell(row=7, column=2).value = ws.cell(row=7, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med8')
-def med8():
-	ws.cell(row=8, column=2).value = ws.cell(row=8, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med9')
-def med9():
-	ws.cell(row=9, column=2).value = ws.cell(row=9, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
-
-@app.route('/med10')
-def med10():
-	ws.cell(row=10, column=2).value = ws.cell(row=10, column=2).value + 1
-	wb1.save('sheet.xlsx')
-	return render_template('menu.html')
+@app.route('/getmed/<id>')
+def getmed(id):
+	id=int(id)
+	# print (ws.cell(row=id, column=2).value)
+	return str(ws.cell(row=id, column=2).value)
 
 @app.route('/camera')
 def camera():
@@ -217,31 +177,99 @@ def run_m10():
    motor1.run(Motor=10)
    return render_template('index.html')
 
+
+gpiopin = {
+     1:6,
+     2:5,
+     3:13,
+     4:12,
+     5:7,
+     6:21,
+     7:26,
+     8:19,
+     9:20,
+     10:16
+}
+
 @app.route('/afterpay')
 def dispense():
-	gate = False
-	for i in range (1,11):
-		for  j in range (1,ws.cell(row=i, column=2).value + 1):
-			run_motor(Motor=i)
-			sleep(6)
-	return render_template('index.html')
+    gate = False
+    for i,v in gpiopin.items():
+	    num=int(ws.cell(row=i, column=2).value or 0)
+	    print (str(i)+" -> GPIO Pin : "+str(v)+" <--> No. of items : "+str(num))
+		#print(type(num))
+	    for  j in range (0,num):
+	    	run_motor(Motor=v)
+	    	sleep(3)
+    return render_template('thanks.html')
 
-
-@app.route('/test')
-def test():
-	ws.cell(row=6, column=2).value=5
-	wb1.save('sheet.xlsx')
-	return
 
 @app.route('/about')
 def about():
    return render_template('about.html')
 
+@app.route('/pay')
+def pay():
+   return render_template('pay.html')
 
-@app.route('/home')
-def home():
-    return render_template('home.html')
+@app.route('/payy')
+def payy():
+   return render_template('payy.html')
+
+paypalrestsdk.configure({
+  "mode": "sandbox", # sandbox or live
+  "client_id": "AR92SyiTyQfPWGs8bH2xAOncMsKiuTXWECm7aBODm62jYBwboMLyyaKmDGBckKT0oDFMpj47AwYOKLuR",
+  "client_secret": "EHLV7tym7p9ZU3gr6SrNTwM5BTIWGhYPCZfVyI6J_XfV6kPPjQQ_YTjadR67UwV0DaUMJsIeQGL2x0dh"
+  
+#   "mode": "live", # sandbox or live
+#   "client_id": "Aa1OvenQntqBU_APRyS-4Exd89f69l4_yQwlLHd7hn3Yq1TNoQph_XBgx_1d15YNuMiCPB9FAlYa0_jn",
+#   "client_secret": "EPplWCfFfvJVaup1YQ05FRpSdfAPreLZUhrezdgpxRlZ4p8LL3NDd-_xYg-V5C45gLdUredMsCuhnMb0"
+  
+   })
+  
+@app.route('/payment', methods=['POST'])
+def payment():
+    total_amount_to_be_paid = compute_sum()
+    print (total_amount_to_be_paid)
+    payment = paypalrestsdk.Payment({
+    "intent": "sale",
+    "payer": {
+        "payment_method": "paypal"},
+    "redirect_urls": {
+        "return_url": "http://127.0.0.1:5001",
+        "cancel_url": "http://127.0.0.1:3000"},
+    "transactions": [{
+        "item_list": {
+            "items": [{
+                "name": "Total Payable Amount",
+                "sku": "item",
+                "price": total_amount_to_be_paid,
+                "currency": "INR",
+                "quantity": 1}]},
+        "amount": {
+            "total": total_amount_to_be_paid,
+            "currency": "INR"},
+        "description": "This is the payment transaction description."}]})
+
+    if payment.create():
+        print("Payment created successfully")
+    else:
+        print(payment.error)
+    return jsonify({'paymentID' : payment.id})
+
+@app.route('/execute', methods=['POST'])
+def execute():
+    success = False
+    payment = paypalrestsdk.Payment.find(request.form['paymentID'])
+
+    if payment.execute({'payer_id':request.form['payerID']}):
+        print ('Execute Success')
+        success = True
+    else:
+        print(execute.error)
+
+    return jsonify({'success' : success})
 
 
 if __name__ == '__main__':
-    app.run(port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)
